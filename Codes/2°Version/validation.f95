@@ -886,6 +886,8 @@ contains
                      xs(id_h2o,i,j,k) = 0.2_dp - 0.15_dp*alpha
                      xs(id_co2,i,j,k) = 2._dp*xs(id_h2o,i,j,k)/3._dp
                   enddo
+                  T(1,j,k) = 300._dp
+                  T(xpoints,j,k) = 300._dp
                
                case(4) 
                   !Computational domain and mesh

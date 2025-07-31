@@ -97,7 +97,7 @@ program main_slw
    !Set up case
    !--------------------------------------------------------------------
    call print_to_prompt('Set up case',3)
-   validation_case = 'solovjovJQSRT2011'
+   validation_case = 'solovjovJHT2011'
    validation_subcase = 3
    call validation_setup                                                !Não mexer
 
