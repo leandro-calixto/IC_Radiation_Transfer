@@ -999,7 +999,6 @@ module slw_functions
       if (trim(slw_nonuniform_method).eq.'rank_correlated') then
          call get_slw_Fj(ngas,Fj_ref(1:ngas),Fj_sup_ref(1:ngas))
          Fj_sup_ref(0) = slw_Fmin  
-      else
          call get_slw_cj(slw_cmin,slw_cmax,ngas,cj_ref(1:ngas),&
                          cj_sup_ref(1:ngas))
          cj_sup_ref(0) = slw_cmin         
@@ -1498,6 +1497,8 @@ module slw_functions
       !-----------------------------------------------------------------
       !Declaration of variables
       !-----------------------------------------------------------------
+      use functions, only: expint, Ib_function
+      use constant, only: py
       use comp_functions, only: shutdown
       use precision_parameters, only: small
       implicit none
@@ -1579,6 +1580,103 @@ module slw_functions
             !Finish computing kappa and a
             kappa_out = x_c
             a_out = eps_1/(1._dp - dexp(-x_c*slw1_length(1)))
+            
+         
+         case('F_1-F_2')
+            !Compute target values
+            F_1 = get_slw_Fj(ngas,Fj_ref(1:ngas),Fj_sup_ref(1:ngas))
+            F_2 = get_slw_Fj(ngas,Fj_ref(2:ngas),Fj_sup_ref(2:ngas))
+
+            counter = 0 
+            diff = 2._dp
+            
+            !Begin bisection method
+            x_l = 1.e-6_dp; x_r = 100000._dp
+            y_l = F_1/F_2 - (1._dp - 2.d_p*expint(-x_l*xsref(1)))/&
+                  (1._dp - 2.d_p*expint(-x_l*xsref(2)))
+            y_r = F_1/F_2 - (1._dp - 2.d_p*expint(-x_r*xsref(1)))/&
+                  (1._dp - 2.d_p*expint(-x_r*xsref(2)))
+            if (y_l*y_r.gt.0) &
+                  call shutdown('slw1_compute_ref: Problem with &
+                                &bisection method')
+            do while(diff .gt. iter_tol)
+               counter = counter + 1
+               if (counter.gt.max_iter) &
+                  call shutdown('slw1_compute_ref: Maximum number of &
+                                 &iterations exceeded')
+               
+               x_c = (x_l + x_r)/2._dp
+               y_c = F_1/F_2 - (1._dp - 2.d_p*expint(-x_c*xsref(1)))/&
+                     (1._dp - 2.d_p*expint(-x_c*xsref(2)))
+               if (y_c * y_l .lt. 0) then
+                  x_r = x_c 
+                  y_r = y_c
+               endif
+               if (y_c * y_r .lt. 0) then
+                  x_l = x_c
+                  y_l = y_c 
+               endif
+               
+               diff = dabs((y_r - y_l)/(y_c + 1.e-6_dp))
+               
+            enddo
+
+            !Finish computing kappa and a
+            kappa_out = x_c
+            a_out = F_1/(pi*Ib_function(Tref,xsref)*&
+                    (1._dp - 2.d_p*expint(-x_c*slw1_length(1))))
+            
+            
+         case('Q_1-Q_2')
+            !Compute target values  
+            Q_1 = get_slw_Qj(ngas,Fj_ref(1:ngas),Fj_sup_ref(1:ngas))
+            Q_2 = get_slw_Qj(ngas,Fj_ref(2:ngas),Fj_sup_ref(2:ngas))
+
+            counter = 0 
+            diff = 2._dp
+            
+            !Begin bisection method
+            x_l = 1.e-6_dp; x_r = 100000._dp
+            y_l = Q_1/Q_2 - (expint(x_l*xsref(1)) +&
+                  expint(x_l*(slw1_length(1) - xsref(1))))/&
+                  (expint(x_l*xsref(1)) +&
+                  expint(x_l*(slw1_length(1) - xsref(1))))
+            y_r = Q_1/Q_2 - (expint(x_l*xsref(1)) +&
+                  expint(x_r*(slw1_length(1) - xsref(1))))/&
+                  (expint(x_r*xsref(1)) +&
+                  expint(x_r*(slw1_length(1) - xsref(1))))
+            if (y_l*y_r.gt.0) &
+                  call shutdown('slw1_compute_ref: Problem with &
+                                &bisection method')
+            do while(diff .gt. iter_tol)
+               counter = counter + 1
+               if (counter.gt.max_iter) &
+                  call shutdown('slw1_compute_ref: Maximum number of &
+                                 &iterations exceeded')
+               
+               x_c = (x_l + x_r)/2._dp
+               y_c = Q_1/Q_2 - (expint(x_c*xsref(1)) +&
+                  expint(x_c*(slw1_length(1) - xsref(1))))/&
+                  (expint(x_c*xsref(1)) +&
+                  expint(x_c*(slw1_length(1) - xsref(1))))
+               if (y_c * y_l .lt. 0) then
+                  x_r = x_c 
+                  y_r = y_c
+               endif
+               if (y_c * y_r .lt. 0) then
+                  x_l = x_c
+                  y_l = y_c 
+               endif
+               
+               diff = dabs((y_r - y_l)/(y_c + 1.e-6_dp))
+               
+            enddo
+
+            !Finish computing kappa and a
+            kappa_out = x_c
+            a_out = Q_1/(2.d_p*pi*Ib_function(Tref,xsref)*&
+                    (expint(x_c*xsref(1)) +&
+                    expint(x_c*(slw1_length(1) - xsref(1))))
             
          	         
          case default
