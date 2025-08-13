@@ -1499,7 +1499,7 @@ module slw_functions
       !-----------------------------------------------------------------
       use physical_functions, only: Ib_function
       use math_functions, only: expint
-      use constant, only: py
+      use constants, only: pi
       use comp_functions, only: shutdown
       use precision_parameters, only: small
       implicit none
@@ -1509,6 +1509,7 @@ module slw_functions
       real(dp),intent(out) :: a_out,kappa_out
       real(dp),parameter :: iter_tol=1.e-9_dp
       real(dp) :: eps,eps_1,eps_2,kp,length
+      real(dp) :: f_1,f_2,q_1,q_2
       real(dp) :: diff,k_new,k_old
       real(dp) :: x_c,x_l,x_r
       real(dp) :: y_c,y_l,y_r
@@ -1585,30 +1586,33 @@ module slw_functions
          
          case('F_1-F_2')
             !Compute target values
-            F_1 = 0._dp
-            F_2 = 10._dp
+            f_1 = 0._dp
+            f_2 = 10._dp
 
             counter = 0 
             diff = 2._dp
             
             !Begin bisection method
-            x_l = 1.e-6_dp; x_r = 100000._dp
-            y_l = F_1/F_2 - (1._dp - 2.d_p*expint(x_l*slw1_length(1)))/&
-                  (1._dp - 2.d_p*expint(x_l*slw1_length(2)))
-            y_r = F_1/F_2 - (1._dp - 2.d_p*expint(x_r*slw1_length(1)))/&
-                  (1._dp - 2.d_p*expint(x_r*slw1_length(2)))
+            x_l = 1.e-8_dp; x_r = 10000._dp
+            
+            y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*slw1_length(1)))/&
+                  (1._dp - 2._dp*expint(3, x_l*slw1_length(2)))
+            y_r = f_1/f_2 - (1._dp - 2._dp*expint(3, x_r*slw1_length(1)))/&
+                  (1._dp - 2._dp*expint(3, x_r*slw1_length(2)))
             if (y_l*y_r.gt.0) &
+            	  PRINT *, "Valor de Y_l:", y_l
+                  PRINT *, "Valor de Y_r:", y_r
                   call shutdown('slw1_compute_ref: Problem with &
                                 &bisection method')
-            do while(diff .gt. iter_tol)
+            do while(diff .gt. iter_tol)S
                counter = counter + 1
                if (counter.gt.max_iter) &
                   call shutdown('slw1_compute_ref: Maximum number of &
                                  &iterations exceeded')
                
                x_c = (x_l + x_r)/2._dp
-               y_c = F_1/F_2 - (1._dp - 2.d_p*expint(x_c*slw1_length(1)))/&
-                     (1._dp - 2.d_p*expint(x_c*slw1_length(2)))
+               y_c = f_1/f_2 - (1._dp - 2._dp*expint(3, x_c*slw1_length(1)))/&
+                     (1._dp - 2._dp*expint(3, x_c*slw1_length(2)))
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
                   y_r = y_c
@@ -1624,28 +1628,28 @@ module slw_functions
 
             !Finish computing kappa and a
             kappa_out = x_c
-            a_out = F_1/(pi*Ib_function(Tref,xsref)*&
-                    (1._dp - 2.d_p*expint(-x_c*slw1_length(1))))
+            a_out = f_1/(pi*Ib_function(Tref,xsref(1))*&
+                    (1._dp - 2._dp*expint(3, x_c*slw1_length(1))))
             
             
          case('Q_1-Q_2')
             !Compute target values  
-            Q_1 = 1._dp
-            Q_2 = 1._dp
+            q_1 = 1._dp
+            q_2 = 1._dp
 
             counter = 0 
             diff = 2._dp
             
             !Begin bisection method
             x_l = 1.e-6_dp; x_r = 100000._dp
-            y_l = Q_1/Q_2 - (expint(x_l*xsref(1)) +&
-                  expint(x_l*(slw1_length(1) - xsref(1))))/&
-                  (expint(x_l*xsref(1)) +&
-                  expint(x_l*(slw1_length(1) - xsref(1))))
-            y_r = Q_1/Q_2 - (expint(x_l*xsref(1)) +&
-                  expint(x_r*(slw1_length(1) - xsref(1))))/&
-                  (expint(x_r*xsref(1)) +&
-                  expint(x_r*(slw1_length(1) - xsref(1))))
+            y_l = q_1/q_2 - (expint(2, x_l*xsref(1)) +&
+                  expint(2, x_l*(slw1_length(1) - xsref(1))))/&
+                  (expint(2, x_l*xsref(1)) +&
+                  expint(2, x_l*(slw1_length(1) - xsref(1))))
+            y_r = q_1/q_2 - (expint(2, x_l*xsref(1)) +&
+                  expint(2, x_r*(slw1_length(1) - xsref(1))))/&
+                  (expint(2, x_r*xsref(1)) +&
+                  expint(2, x_r*(slw1_length(1) - xsref(1))))
             if (y_l*y_r.gt.0) &
                   call shutdown('slw1_compute_ref: Problem with &
                                 &bisection method')
@@ -1656,10 +1660,10 @@ module slw_functions
                                  &iterations exceeded')
                
                x_c = (x_l + x_r)/2._dp
-               y_c = Q_1/Q_2 - (expint(x_c*xsref(1)) +&
-                  expint(x_c*(slw1_length(1) - xsref(1))))/&
-                  (expint(x_c*xsref(1)) +&
-                  expint(x_c*(slw1_length(1) - xsref(1))))
+               y_c = q_1/q_2 - (expint(2, x_c*xsref(1)) +&
+                  expint(2, x_c*(slw1_length(1) - xsref(1))))/&
+                  (expint(2, x_c*xsref(1)) +&
+                  expint(2, x_c*(slw1_length(1) - xsref(1))))
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
                   y_r = y_c
@@ -1675,9 +1679,9 @@ module slw_functions
 
             !Finish computing kappa and a
             kappa_out = x_c
-            a_out = Q_1/(2.d_p*pi*Ib_function(Tref,xsref)*&
-                    (expint(x_c*xsref(1)) +&
-                    expint(x_c*(slw1_length(1) - xsref(1))))
+            a_out = -q_1/(2._dp*pi*Ib_function(Tref,xsref(1))*&
+                    (expint(2, x_c*xsref(1)) +&
+                    expint(2, x_c*(slw1_length(1) - xsref(1)))))
             
          	         
          case default
