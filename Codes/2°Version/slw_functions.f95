@@ -1497,7 +1497,8 @@ module slw_functions
       !-----------------------------------------------------------------
       !Declaration of variables
       !-----------------------------------------------------------------
-      use functions, only: expint, Ib_function
+      use physical_functions, only: Ib_function
+      use math_functions, only: expint
       use constant, only: py
       use comp_functions, only: shutdown
       use precision_parameters, only: small
@@ -1584,18 +1585,18 @@ module slw_functions
          
          case('F_1-F_2')
             !Compute target values
-            F_1 = get_slw_Fj(ngas,Fj_ref(1:ngas),Fj_sup_ref(1:ngas))
-            F_2 = get_slw_Fj(ngas,Fj_ref(2:ngas),Fj_sup_ref(2:ngas))
+            F_1 = 0._dp
+            F_2 = 10._dp
 
             counter = 0 
             diff = 2._dp
             
             !Begin bisection method
             x_l = 1.e-6_dp; x_r = 100000._dp
-            y_l = F_1/F_2 - (1._dp - 2.d_p*expint(-x_l*xsref(1)))/&
-                  (1._dp - 2.d_p*expint(-x_l*xsref(2)))
-            y_r = F_1/F_2 - (1._dp - 2.d_p*expint(-x_r*xsref(1)))/&
-                  (1._dp - 2.d_p*expint(-x_r*xsref(2)))
+            y_l = F_1/F_2 - (1._dp - 2.d_p*expint(x_l*slw1_length(1)))/&
+                  (1._dp - 2.d_p*expint(x_l*slw1_length(2)))
+            y_r = F_1/F_2 - (1._dp - 2.d_p*expint(x_r*slw1_length(1)))/&
+                  (1._dp - 2.d_p*expint(x_r*slw1_length(2)))
             if (y_l*y_r.gt.0) &
                   call shutdown('slw1_compute_ref: Problem with &
                                 &bisection method')
@@ -1606,8 +1607,8 @@ module slw_functions
                                  &iterations exceeded')
                
                x_c = (x_l + x_r)/2._dp
-               y_c = F_1/F_2 - (1._dp - 2.d_p*expint(-x_c*xsref(1)))/&
-                     (1._dp - 2.d_p*expint(-x_c*xsref(2)))
+               y_c = F_1/F_2 - (1._dp - 2.d_p*expint(x_c*slw1_length(1)))/&
+                     (1._dp - 2.d_p*expint(x_c*slw1_length(2)))
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
                   y_r = y_c
@@ -1629,8 +1630,8 @@ module slw_functions
             
          case('Q_1-Q_2')
             !Compute target values  
-            Q_1 = get_slw_Qj(ngas,Fj_ref(1:ngas),Fj_sup_ref(1:ngas))
-            Q_2 = get_slw_Qj(ngas,Fj_ref(2:ngas),Fj_sup_ref(2:ngas))
+            Q_1 = 1._dp
+            Q_2 = 1._dp
 
             counter = 0 
             diff = 2._dp

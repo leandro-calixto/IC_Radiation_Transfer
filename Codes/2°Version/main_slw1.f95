@@ -98,7 +98,7 @@ program main_slw
    !--------------------------------------------------------------------
    call print_to_prompt('Set up case',3)
    validation_case = 'solovjovJHT2011'
-   validation_subcase = 3
+   validation_subcase = 1
    call validation_setup                                                !Não mexer
 
    !--------------------------------------------------------------------
@@ -115,10 +115,10 @@ program main_slw
       albdf_info_file(id_co2) = 'ALBDFs/infoCO2.data'
    endif
    slw_nonuniform_method = 'rank_correlated'                            !Não mexer
-   slw_mixture_method = 'one_species'                                !'one_species', 'multiplication'
-   slw1_approach = 'epsilon-epsilon'
+   slw_mixture_method = 'multiplication'                                !'one_species', 'multiplication'
+   slw1_approach = 'F_1-F_2'
    slw1_length(1) = 0.5_dp
-   slw1_length(2) = 1.25_dp
+   slw1_length(2) = 0.83_dp
    slw_Fmin=0._dp; slw_Fmax=1._dp 
 
    !--------------------------------------------------------------------
