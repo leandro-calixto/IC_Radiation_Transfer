@@ -1504,13 +1504,16 @@ module slw_functions
       use precision_parameters, only: small
       implicit none
       integer,parameter :: max_iter = 1000
-      integer :: counter
+      integer :: counter,i
+      logical :: found_interval
       real(dp),intent(in) :: pref,Tref,xsref(:)
       real(dp),intent(out) :: a_out,kappa_out
       real(dp),parameter :: iter_tol=1.e-9_dp
       real(dp) :: eps,eps_1,eps_2,kp,length
+      real(dp) :: diff,k_new,k_old,factor
+      real(dp) :: denom_l,denom_r,denom_c
+      real(dp) :: numer_l,numer_r,numer_c
       real(dp) :: f_1,f_2,q_1,q_2
-      real(dp) :: diff,k_new,k_old
       real(dp) :: x_c,x_l,x_r
       real(dp) :: y_c,y_l,y_r
       
@@ -1592,19 +1595,42 @@ module slw_functions
             counter = 0 
             diff = 2._dp
             
-            !Begin bisection method
-            x_l = 1.e-8_dp; x_r = 10000._dp
+            !--- Encontrar intervalo com troca de sinal ---
+            x_l = 1.e-8_dp
+            y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*slw1_length(1)))/ &
+                            (1._dp - 2._dp*expint(3, x_l*slw1_length(2)))
+
+            factor = 10._dp
+            found_interval = .false.
+
+            do i = 1, 1000
+               x_r = x_l * factor
+               y_r = f_1/f_2 - (1._dp - 2._dp*expint(3, x_r*slw1_length(1)))/&
+                               (1._dp - 2._dp*expint(3, x_r*slw1_length(2)))
+
+               if (y_l * y_r < 0._dp) then
+                  found_interval = .true.
+                  exit
+               else
+                  x_l = x_r
+                  y_l = y_r
+               end if
+            end do
+
+            if (.not. found_interval) then
+               call shutdown('slw1_compute_ref: Not found change in the signal')
+            end if
             
             y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*slw1_length(1)))/&
-                  (1._dp - 2._dp*expint(3, x_l*slw1_length(2)))
+                            (1._dp - 2._dp*expint(3, x_l*slw1_length(2)))
             y_r = f_1/f_2 - (1._dp - 2._dp*expint(3, x_r*slw1_length(1)))/&
-                  (1._dp - 2._dp*expint(3, x_r*slw1_length(2)))
+                            (1._dp - 2._dp*expint(3, x_r*slw1_length(2)))
+                            
             if (y_l*y_r.gt.0) &
-            	  PRINT *, "Valor de Y_l:", y_l
-                  PRINT *, "Valor de Y_r:", y_r
-                  call shutdown('slw1_compute_ref: Problem with &
+               call shutdown('slw1_compute_ref: Problem with &
                                 &bisection method')
-            do while(diff .gt. iter_tol)S
+                                
+            do while(diff .gt. iter_tol)
                counter = counter + 1
                if (counter.gt.max_iter) &
                   call shutdown('slw1_compute_ref: Maximum number of &
@@ -1612,7 +1638,7 @@ module slw_functions
                
                x_c = (x_l + x_r)/2._dp
                y_c = f_1/f_2 - (1._dp - 2._dp*expint(3, x_c*slw1_length(1)))/&
-                     (1._dp - 2._dp*expint(3, x_c*slw1_length(2)))
+                               (1._dp - 2._dp*expint(3, x_c*slw1_length(2)))
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
                   y_r = y_c
@@ -1634,25 +1660,27 @@ module slw_functions
             
          case('Q_1-Q_2')
             !Compute target values  
-            q_1 = 1._dp
-            q_2 = 1._dp
+            q_1 = -180._dp
+            q_2 = -70._dp
 
             counter = 0 
             diff = 2._dp
             
             !Begin bisection method
             x_l = 1.e-6_dp; x_r = 100000._dp
-            y_l = q_1/q_2 - (expint(2, x_l*xsref(1)) +&
-                  expint(2, x_l*(slw1_length(1) - xsref(1))))/&
-                  (expint(2, x_l*xsref(1)) +&
-                  expint(2, x_l*(slw1_length(1) - xsref(1))))
-            y_r = q_1/q_2 - (expint(2, x_l*xsref(1)) +&
-                  expint(2, x_r*(slw1_length(1) - xsref(1))))/&
-                  (expint(2, x_r*xsref(1)) +&
-                  expint(2, x_r*(slw1_length(1) - xsref(1))))
+            
+            numer_l = expint(2, x_l*0._dp) + expint(2, x_l*(slw1_length(1) - 0._dp))
+            denom_l = expint(2, x_l*0.5_dp) + expint(2, x_l*(slw1_length(1) - 0.5_dp))
+            y_l = q_1/q_2 - numer_l / denom_l
+
+            numer_r = expint(2, x_r*0._dp) + expint(2, x_r*(slw1_length(1) - 0._dp))
+            denom_r = expint(2, x_r*0.5_dp) + expint(2, x_r*(slw1_length(1) - 0.5_dp))
+            y_r = q_1/q_2 - numer_r / denom_r
+            
             if (y_l*y_r.gt.0) &
                   call shutdown('slw1_compute_ref: Problem with &
                                 &bisection method')
+                                
             do while(diff .gt. iter_tol)
                counter = counter + 1
                if (counter.gt.max_iter) &
@@ -1660,14 +1688,15 @@ module slw_functions
                                  &iterations exceeded')
                
                x_c = (x_l + x_r)/2._dp
-               y_c = q_1/q_2 - (expint(2, x_c*xsref(1)) +&
-                  expint(2, x_c*(slw1_length(1) - xsref(1))))/&
-                  (expint(2, x_c*xsref(1)) +&
-                  expint(2, x_c*(slw1_length(1) - xsref(1))))
+               numer_c = expint(2, x_c*0._dp) + expint(2, x_c*(slw1_length(1) - 0._dp))
+               denom_c = expint(2, x_c*0.5_dp) + expint(2, x_c*(slw1_length(1) - 0.5_dp))
+               y_c = q_1/q_2 - numer_c / denom_c
+               
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
                   y_r = y_c
                endif
+               
                if (y_c * y_r .lt. 0) then
                   x_l = x_c
                   y_l = y_c 
@@ -1679,9 +1708,9 @@ module slw_functions
 
             !Finish computing kappa and a
             kappa_out = x_c
-            a_out = -q_1/(2._dp*pi*Ib_function(Tref,xsref(1))*&
-                    (expint(2, x_c*xsref(1)) +&
-                    expint(2, x_c*(slw1_length(1) - xsref(1)))))
+            denom_c = (2._dp*pi*Ib_function(Tref,0._dp)*&
+              (expint(2, x_c*0._dp) + expint(2, x_c*(slw1_length(1) - 0._dp))))
+            a_out = -q_1 / denom_c
             
          	         
          case default
