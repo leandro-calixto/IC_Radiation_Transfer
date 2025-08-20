@@ -1504,13 +1504,12 @@ module slw_functions
       use precision_parameters, only: small
       implicit none
       integer,parameter :: max_iter = 1000
-      integer :: counter,i
-      logical :: found_interval
+      integer :: counter
       real(dp),intent(in) :: pref,Tref,xsref(:)
       real(dp),intent(out) :: a_out,kappa_out
       real(dp),parameter :: iter_tol=1.e-9_dp
       real(dp) :: eps,eps_1,eps_2,kp,length
-      real(dp) :: diff,k_new,k_old,factor
+      real(dp) :: diff,k_new,k_old
       real(dp) :: denom_l,denom_r,denom_c
       real(dp) :: numer_l,numer_r,numer_c
       real(dp) :: f_1,f_2,q_1,q_2
@@ -1589,42 +1588,23 @@ module slw_functions
          
          case('F_1-F_2')
             !Compute target values
-            f_1 = 0._dp
-            f_2 = 10._dp
+            f_1 = 53._dp
+            f_2 = 50._dp
 
             counter = 0 
             diff = 2._dp
             
+            
             !--- Encontrar intervalo com troca de sinal ---
-            x_l = 1.e-8_dp
-            y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*slw1_length(1)))/ &
-                            (1._dp - 2._dp*expint(3, x_l*slw1_length(2)))
-
-            factor = 10._dp
-            found_interval = .false.
-
-            do i = 1, 1000
-               x_r = x_l * factor
-               y_r = f_1/f_2 - (1._dp - 2._dp*expint(3, x_r*slw1_length(1)))/&
-                               (1._dp - 2._dp*expint(3, x_r*slw1_length(2)))
-
-               if (y_l * y_r < 0._dp) then
-                  found_interval = .true.
-                  exit
-               else
-                  x_l = x_r
-                  y_l = y_r
-               end if
-            end do
-
-            if (.not. found_interval) then
-               call shutdown('slw1_compute_ref: Not found change in the signal')
-            end if
+            x_l = 2._dp
+            x_r = 1.e-4_dp 
             
             y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*slw1_length(1)))/&
                             (1._dp - 2._dp*expint(3, x_l*slw1_length(2)))
             y_r = f_1/f_2 - (1._dp - 2._dp*expint(3, x_r*slw1_length(1)))/&
                             (1._dp - 2._dp*expint(3, x_r*slw1_length(2)))
+                            
+            write(*,*) y_l, y_r 
                             
             if (y_l*y_r.gt.0) &
                call shutdown('slw1_compute_ref: Problem with &
@@ -1654,28 +1634,33 @@ module slw_functions
 
             !Finish computing kappa and a
             kappa_out = x_c
-            a_out = f_1/(pi*Ib_function(Tref,xsref(1))*&
+            a_out = f_1/(pi*5.67e-8_dp*(Tref**4)*&
                     (1._dp - 2._dp*expint(3, x_c*slw1_length(1))))
+                    
+            write(*,*) kappa_out,a_out
             
             
          case('Q_1-Q_2')
             !Compute target values  
-            q_1 = -180._dp
-            q_2 = -70._dp
+            q_1 = 18._dp
+            q_2 = 20._dp
 
             counter = 0 
             diff = 2._dp
             
             !Begin bisection method
-            x_l = 1.e-6_dp; x_r = 100000._dp
+            x_l = 2._dp
+            x_r = 1.e-4_dp 
             
-            numer_l = expint(2, x_l*0._dp) + expint(2, x_l*(slw1_length(1) - 0._dp))
-            denom_l = expint(2, x_l*0.5_dp) + expint(2, x_l*(slw1_length(1) - 0.5_dp))
-            y_l = q_1/q_2 - numer_l / denom_l
+            numer_l = expint(2, x_l*0.2_dp) + expint(2, x_l*(slw1_length(1) - 0.2_dp))
+            denom_l = expint(2, x_l*1._dp) + expint(2, x_l*(slw1_length(1) - 1._dp))
+            y_l = q_1/q_2 - numer_l/denom_l
 
-            numer_r = expint(2, x_r*0._dp) + expint(2, x_r*(slw1_length(1) - 0._dp))
-            denom_r = expint(2, x_r*0.5_dp) + expint(2, x_r*(slw1_length(1) - 0.5_dp))
-            y_r = q_1/q_2 - numer_r / denom_r
+            numer_r = expint(2, x_r*0.2_dp) + expint(2, x_r*(slw1_length(1) - 0.2_dp))
+            denom_r = expint(2, x_r*1._dp) + expint(2, x_r*(slw1_length(1) - 1._dp))
+            y_r = q_1/q_2 - numer_r/denom_r
+            
+            write(*,*) y_l, y_r 
             
             if (y_l*y_r.gt.0) &
                   call shutdown('slw1_compute_ref: Problem with &
@@ -1688,9 +1673,9 @@ module slw_functions
                                  &iterations exceeded')
                
                x_c = (x_l + x_r)/2._dp
-               numer_c = expint(2, x_c*0._dp) + expint(2, x_c*(slw1_length(1) - 0._dp))
-               denom_c = expint(2, x_c*0.5_dp) + expint(2, x_c*(slw1_length(1) - 0.5_dp))
-               y_c = q_1/q_2 - numer_c / denom_c
+               numer_c = expint(2, x_c*0.2_dp) + expint(2, x_c*(slw1_length(1) - 0.2_dp))
+               denom_c = expint(2, x_c*1._dp) + expint(2, x_c*(slw1_length(1) - 1._dp))
+               y_c = q_1/q_2 - numer_c/denom_c
                
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
@@ -1708,11 +1693,13 @@ module slw_functions
 
             !Finish computing kappa and a
             kappa_out = x_c
-            denom_c = (2._dp*pi*Ib_function(Tref,0._dp)*&
-              (expint(2, x_c*0._dp) + expint(2, x_c*(slw1_length(1) - 0._dp))))
-            a_out = -q_1 / denom_c
+            denom_c = (2._dp*5.67e-8_dp*(Tref**4)*&
+              (expint(2, x_c*0.2_dp) + expint(2, x_c*(slw1_length(1) - 0.2_dp))))
+            a_out = -q_1/denom_c
             
-         	         
+            write(*,*) kappa_out, a_out
+            
+                 
          case default
             call shutdown('slw1_compute_ref: no valid option for &
                           &slw1_approach')

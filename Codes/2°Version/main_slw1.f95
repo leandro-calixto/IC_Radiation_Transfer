@@ -117,8 +117,8 @@ program main_slw
    slw_nonuniform_method = 'rank_correlated'                            !Não mexer
    slw_mixture_method = 'multiplication'                                !'one_species', 'multiplication'
    slw1_approach = 'Q_1-Q_2'
-   slw1_length(1) = 1._dp
-   slw1_length(2) = 0.83_dp
+   slw1_length(1) = 1.1_dp
+   slw1_length(2) = 1.0_dp
    slw_Fmin=0._dp; slw_Fmax=1._dp 
 
    !--------------------------------------------------------------------
