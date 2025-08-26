@@ -498,7 +498,7 @@ module slw_functions
       use comp_functions, only: dprint,shutdown
       use global_parameters, only: id_soot,number_of_species
       use math_functions, only: locate
-      use precision_parameters, only: small 
+      use precision_parameters, only: small
       implicit none
       integer,optional :: bslw_band_index
       integer :: id_spc,it_counter,max_iter,nsp,spc_counter
@@ -864,7 +864,7 @@ module slw_functions
             molm = mol_density
             
          case('SLW1')
-            molm = mol_density!*mole_frac
+            molm = mol_density*mole_frac
             
          case default
             call shutdown('Problem in the specification of&
@@ -958,7 +958,7 @@ module slw_functions
       real(dp),allocatable,dimension(:) :: cj_ref,cj_sup_ref
       real(dp),allocatable,dimension(:) :: Fj_ref,Fj_sup_ref
       real(dp) :: a_j,kappa_j,sum_kp
-
+a_j = Pgas  !Added just to avoid a compilation warning
       !-----------------------------------------------------------------
       !Set up the optional parameters
       !-----------------------------------------------------------------
@@ -999,6 +999,7 @@ module slw_functions
       if (trim(slw_nonuniform_method).eq.'rank_correlated') then
          call get_slw_Fj(ngas,Fj_ref(1:ngas),Fj_sup_ref(1:ngas))
          Fj_sup_ref(0) = slw_Fmin  
+      else
          call get_slw_cj(slw_cmin,slw_cmax,ngas,cj_ref(1:ngas),&
                          cj_sup_ref(1:ngas))
          cj_sup_ref(0) = slw_cmin         
@@ -1056,7 +1057,7 @@ module slw_functions
       real(dp) :: cj_sup_loc,F0
       real(dp),allocatable,dimension(:) :: cj_ref,cj_sup_ref
       real(dp),allocatable,dimension(:) :: Fj_ref,Fj_sup_ref      
-
+a_j = Pgas  !Added just to avoid a compilation warning
       !-----------------------------------------------------------------
       !Set up the optional parameters
       !-----------------------------------------------------------------
@@ -1132,6 +1133,205 @@ module slw_functions
       deallocate(Fj_ref,Fj_sup_ref)
 
    endfunction get_slw_emissivity
+
+   !====================================================================
+   !Function to compute the heat flux for a uniform one-dimensional
+   !gas column using the SLW model
+   !====================================================================
+   real(dp) function get_slw_uniform_flux(Tgas,Pgas,Xgas,Tsource,ngas,&
+                                   xpos,prepare_albdf,bslw_band_index)
+   
+      !-----------------------------------------------------------------
+      !Declaration of variables
+      !-----------------------------------------------------------------
+      use comp_functions, only: CheckMemAlloc,dprint
+      use constants, only: pi,sigrpi
+      use math_functions, only: expint
+      implicit none
+      integer :: ierr,jgas,ipb
+      integer,intent(in) :: ngas
+      integer,optional :: bslw_band_index
+      logical,optional :: prepare_albdf
+      logical :: go_albdf,transparent_window
+      real(dp),intent(in) :: Pgas,Tgas,Tsource,Xgas(:),xpos
+      real(dp) :: a_j,Ib,kappa_j,sum_F
+      real(dp) :: cj_sup_loc,F0
+      real(dp),allocatable,dimension(:) :: cj_ref,cj_sup_ref
+      real(dp),allocatable,dimension(:) :: Fj_ref,Fj_sup_ref      
+a_j = Pgas  !Added just to avoid a compilation warning
+      !-----------------------------------------------------------------
+      !Set up the optional parameters
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_flux: Set up the optional parameters')
+      
+      !Flag for loading the ALBDF
+      go_albdf = .false.
+      if (present(prepare_albdf)) go_albdf = prepare_albdf
+      
+      !Band index
+      ipb = 1; if (present(bslw_band_index)) ipb = bslw_band_index
+
+      !-----------------------------------------------------------------
+      !Allocating arrays
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_flux: Allocating arrays')
+      allocate(cj_ref(0:ngas),stat=ierr)
+      call CheckMemAlloc('cj_ref',ierr)
+      allocate(cj_sup_ref(0:ngas),stat=ierr)
+      call CheckMemAlloc('cj_sup_ref',ierr)
+      allocate(Fj_ref(0:ngas),stat=ierr)
+      call CheckMemAlloc('Fj_ref',ierr)
+      allocate(Fj_sup_ref(0:ngas),stat=ierr)
+      call CheckMemAlloc('Fj_sup_ref',ierr)
+
+      !-----------------------------------------------------------------
+      !Load the ALBDF, if requested
+      !-----------------------------------------------------------------
+      if (go_albdf) then
+         call dprint('get_slw_uniform_flux: Load the ALBDF')
+         call load_albdf
+      endif
+      
+      !-----------------------------------------------------------------
+      !Define cross-sections
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_flux: Define cross-sections')
+      call get_slw_cj(slw_cmin,slw_cmax,ngas,cj_ref(1:ngas),&
+                      cj_sup_ref(1:ngas))
+      cj_sup_ref(0) = slw_cmin
+
+      !-----------------------------------------------------------------
+      !Main loop
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_flux: Main loop')
+      sum_F = 0._dp
+      gas_loop: do jgas=0,ngas
+         !Check if the gas is a transparent window
+         transparent_window = .false.                                   !The transparent window should be included in 
+         if (jgas.eq.0) transparent_window = .true.                     !  the gas_loop loop to initialize F0
+      
+         !Compute properties for the gas
+         call compute_slw_gas_parameters(kappa_j,a_j,cj_sup_ref(jgas),&
+            cj_sup_loc,Fj_ref(jgas),Fj_sup_ref(jgas),F0,Tgas,Xgas,&
+            reference_T=Tsource,reference_xs=Xgas,transparent_window=&
+            transparent_window,nonuniform_method='uniform')
+
+         !Summing the emissivity
+         Ib = sigrpi*(Tsource**4)
+         sum_F = sum_F + &
+                 pi*a_j*Ib*(1._dp - 2._dp*expint(3,kappa_j*xpos))
+         
+      enddo gas_loop
+      get_slw_uniform_flux = sum_F
+
+      !-----------------------------------------------------------------
+      !Deallocate arrays
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_flux: Deallocate arrays')
+      deallocate(cj_ref,cj_sup_ref)
+      deallocate(Fj_ref,Fj_sup_ref)
+
+   endfunction get_slw_uniform_flux
+
+   !====================================================================
+   !Function to compute the heat flux for a uniform one-dimensional
+   !gas column using the SLW model
+   !====================================================================
+   real(dp) function get_slw_uniform_source(Tgas,Pgas,Xgas,Tsource,&
+                         ngas,xpos,length,prepare_albdf,bslw_band_index)
+   
+      !-----------------------------------------------------------------
+      !Declaration of variables
+      !-----------------------------------------------------------------
+      use comp_functions, only: CheckMemAlloc,dprint
+      use constants, only: sigrpi,twopi
+      use math_functions, only: expint
+      implicit none
+      integer :: ierr,jgas,ipb
+      integer,intent(in) :: ngas
+      integer,optional :: bslw_band_index
+      logical,optional :: prepare_albdf
+      logical :: go_albdf,transparent_window
+      real(dp),intent(in) :: length,Pgas,Tgas,Tsource,Xgas(:),xpos
+      real(dp) :: a_j,Ib,kappa_j,sum_Q
+      real(dp) :: cj_sup_loc,F0
+      real(dp),allocatable,dimension(:) :: cj_ref,cj_sup_ref
+      real(dp),allocatable,dimension(:) :: Fj_ref,Fj_sup_ref      
+a_j = Pgas  !Added just to avoid a compilation warning
+      !-----------------------------------------------------------------
+      !Set up the optional parameters
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_source: &
+                  &Set up the optional parameters')
+      
+      !Flag for loading the ALBDF
+      go_albdf = .false.
+      if (present(prepare_albdf)) go_albdf = prepare_albdf
+      
+      !Band index
+      ipb = 1; if (present(bslw_band_index)) ipb = bslw_band_index
+
+      !-----------------------------------------------------------------
+      !Allocating arrays
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_source: Allocating arrays')
+      allocate(cj_ref(0:ngas),stat=ierr)
+      call CheckMemAlloc('cj_ref',ierr)
+      allocate(cj_sup_ref(0:ngas),stat=ierr)
+      call CheckMemAlloc('cj_sup_ref',ierr)
+      allocate(Fj_ref(0:ngas),stat=ierr)
+      call CheckMemAlloc('Fj_ref',ierr)
+      allocate(Fj_sup_ref(0:ngas),stat=ierr)
+      call CheckMemAlloc('Fj_sup_ref',ierr)
+
+      !-----------------------------------------------------------------
+      !Load the ALBDF, if requested
+      !-----------------------------------------------------------------
+      if (go_albdf) then
+         call dprint('get_slw_uniform_source: Load the ALBDF')
+         call load_albdf
+      endif
+      
+      !-----------------------------------------------------------------
+      !Define cross-sections
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_source: Define cross-sections')
+      call get_slw_cj(slw_cmin,slw_cmax,ngas,cj_ref(1:ngas),&
+                      cj_sup_ref(1:ngas))
+      cj_sup_ref(0) = slw_cmin
+
+      !-----------------------------------------------------------------
+      !Main loop
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_source: Main loop')
+      sum_Q = 0._dp
+      gas_loop: do jgas=0,ngas
+         !Check if the gas is a transparent window
+         transparent_window = .false.                                   !The transparent window should be included in 
+         if (jgas.eq.0) transparent_window = .true.                     !  the gas_loop loop to initialize F0
+      
+         !Compute properties for the gas
+         call compute_slw_gas_parameters(kappa_j,a_j,cj_sup_ref(jgas),&
+            cj_sup_loc,Fj_ref(jgas),Fj_sup_ref(jgas),F0,Tgas,Xgas,&
+            reference_T=Tsource,reference_xs=Xgas,transparent_window=&
+            transparent_window,nonuniform_method='uniform')
+
+         !Summing the emissivity
+         Ib = sigrpi*(Tsource**4)
+         sum_Q = sum_Q - twopi*a_j*kappa_j*Ib*&
+            (expint(2,kappa_j*xpos) + (expint(2,kappa_j*(length-xpos))))
+         
+      enddo gas_loop
+      get_slw_uniform_source = sum_Q
+
+      !-----------------------------------------------------------------
+      !Deallocate arrays
+      !-----------------------------------------------------------------
+      call dprint('get_slw_uniform_source: Deallocate arrays')
+      deallocate(cj_ref,cj_sup_ref)
+      deallocate(Fj_ref,Fj_sup_ref)
+
+   endfunction get_slw_uniform_source
 
    !====================================================================
    !Routine to determine the absorption coefficient 
@@ -1497,23 +1697,19 @@ module slw_functions
       !-----------------------------------------------------------------
       !Declaration of variables
       !-----------------------------------------------------------------
-      use physical_functions, only: Ib_function
-      use math_functions, only: expint
-      use constants, only: pi
       use comp_functions, only: shutdown
       use precision_parameters, only: small
+      use physical_functions, only: Planck_function
       implicit none
       integer,parameter :: max_iter = 1000
       integer :: counter
       real(dp),intent(in) :: pref,Tref,xsref(:)
       real(dp),intent(out) :: a_out,kappa_out
-      real(dp),parameter :: iter_tol=1.e-9_dp
+      real(dp),parameter :: iter_tol=1.e-6_dp
       real(dp) :: eps,eps_1,eps_2,kp,length
       real(dp) :: diff,k_new,k_old
-      real(dp) :: denom_l,denom_r,denom_c
-      real(dp) :: numer_l,numer_r,numer_c
-      real(dp) :: f_1,f_2,q_1,q_2
-      real(dp) :: x_c,x_l,x_r
+      real(dp) :: F_1,F_2,Q_1,Q_2
+      real(dp) :: x_1,x_2,x_c,x_l,x_r
       real(dp) :: y_c,y_l,y_r
       
       selectcase(trim(slw1_approach))
@@ -1546,12 +1742,9 @@ module slw_functions
                                        slw1_ngases,slw1_length(1))
             eps_2 = get_slw_emissivity(Tref,pref,xsref,Tref,&
                                        slw1_ngases,slw1_length(2))
-                                       
-            counter = 0 
-            diff = 2._dp
             
             !Begin bisection method
-            x_l = 1.e-6_dp; x_r = 100000._dp
+            x_l = small; x_r = 1000._dp
             y_l = eps_1/eps_2 - (1._dp - dexp(-x_l*slw1_length(1)))/&
                                 (1._dp - dexp(-x_l*slw1_length(2)))
             y_r = eps_1/eps_2 - (1._dp - dexp(-x_r*slw1_length(1)))/&
@@ -1559,7 +1752,7 @@ module slw_functions
             if (y_l*y_r.gt.0) &
                   call shutdown('slw1_compute_ref: Problem with &
                                 &bisection method')
-            do while(diff .gt. iter_tol)
+            do while(diff.gt.iter_tol)
                counter = counter + 1
                if (counter.gt.max_iter) &
                   call shutdown('slw1_compute_ref: Maximum number of &
@@ -1568,42 +1761,44 @@ module slw_functions
                x_c = (x_l + x_r)/2._dp
                y_c = eps_1/eps_2 - (1._dp - dexp(-x_c*slw1_length(1)))/&
                                    (1._dp - dexp(-x_c*slw1_length(2)))
-               if (y_c * y_l .lt. 0) then
-                  x_r = x_c 
-                  y_r = y_c
-               endif
-               if (y_c * y_r .lt. 0) then
+               if (y_c*y_l.gt.0) then
                   x_l = x_c
-                  y_l = y_c 
+                  y_l = y_c
+               endif
+               if (y_c*y_r.gt.0) then
+                  x_r = x_c 
+                  y_r = y_c 
                endif
                
-               diff = dabs((y_r - y_l)/(y_c + 1.e-6_dp))
+               diff = dabs((y_l - y_r)/(y_c + small))
                
             enddo
 
             !Finish computing kappa and a
             kappa_out = x_c
             a_out = eps_1/(1._dp - dexp(-x_c*slw1_length(1)))
-            
-         
-         case('F_1-F_2')
-            !Compute target values
-            f_1 = 53._dp
-            f_2 = 50._dp
 
+         case('F-F')
+            !Surrogate names
+            x_1 = slw1_position(1)
+            x_2 = slw1_position(2)
+
+            !Reference values
+            f_1 = get_slw_uniform_flux(Tref,pref,xsref,Tref,&
+                                       slw1_ngases,x_1)  
+            f_2 = get_slw_uniform_flux(Tref,pref,xsref,Tref,&
+                                       slw1_ngases,x_1)
+            write(*,*) f_1,f_2
+                                       
+            !Begin bisection method
             counter = 0 
             diff = 2._dp
+            x_l = small; x_r = 1000._dp
             
-            !--- Encontrar intervalo com troca de sinal ---
-            x_l = 2._dp
-            x_r = 1.e-4_dp 
-            
-            y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*slw1_length(1)))/&
-                            (1._dp - 2._dp*expint(3, x_l*slw1_length(2)))
-            y_r = f_1/f_2 - (1._dp - 2._dp*expint(3, x_r*slw1_length(1)))/&
-                            (1._dp - 2._dp*expint(3, x_r*slw1_length(2)))
-                            
-            write(*,*) y_l, y_r 
+            y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*x_1))/&
+                            (1._dp - 2._dp*expint(3, x_l*x_2))
+            y_r = f_1/f_2 - (1._dp - 2._dp*expint(3, x_r*x_1))/&
+                            (1._dp - 2._dp*expint(3, x_r*x_2))
                             
             if (y_l*y_r.gt.0) &
                call shutdown('slw1_compute_ref: Problem with &
@@ -1616,8 +1811,8 @@ module slw_functions
                                  &iterations exceeded')
                
                x_c = (x_l + x_r)/2._dp
-               y_c = f_1/f_2 - (1._dp - 2._dp*expint(3, x_c*slw1_length(1)))/&
-                               (1._dp - 2._dp*expint(3, x_c*slw1_length(2)))
+               y_c = f_1/f_2 - (1._dp - 2._dp*expint(3, x_c*x_1))/&
+                               (1._dp - 2._dp*expint(3, x_c*x_2))
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
                   y_r = y_c
@@ -1633,36 +1828,39 @@ module slw_functions
 
             !Finish computing kappa and a
             kappa_out = x_c
-            a_out = f_1/(pi*5.67e-8_dp*(Tref**4)*&
-                    (1._dp - 2._dp*expint(3, x_c*slw1_length(1))))
+            a_out = f_1/(pi*Planck_function(Tref,x_1)*&
+                    (1._dp - 2._dp*expint(3, x_c*x_1)))
             
-            f_1 = pi*a_out*5.67e-8_dp*(Tref**4)*(1._dp - 2._dp*expint(3, x_c*slw1_length(1)))
-            f_2 = pi*a_out*5.67e-8_dp*(Tref**4)*(1._dp - 2._dp*expint(3, x_c*slw1_length(2)))
-                    
+            f_1 = pi*a_out*Planck_function(Tref,x_1)*(1._dp - 2._dp*expint(3, x_c*x_1))
+            f_2 = pi*a_out*Planck_function(Tref,x_2)*(1._dp - 2._dp*expint(3, x_c*x_2))
+            
             write(*,*) f_1,f_2
-            
-            
-         case('Q_1-Q_2')
-            !Compute target values  
-            q_1 = -18._dp
-            q_2 = -20._dp
 
+         case('Q-Q')
+            !Surrogate names
+            x_1 = slw1_position(1)
+            x_2 = slw1_position(2)
+            length = maxval(slw1_length)
+            x_l = small; x_r = 1000._dp
+
+            !Reference values
+            q_1 = get_slw_uniform_source(Tref,pref,xsref,Tref,&
+                                         slw1_ngases,x_1,length)  
+            q_2 = get_slw_uniform_source(Tref,pref,xsref,Tref,&
+                                         slw1_ngases,x_1,length)
+            write(*,*) q_1,q_2
+                                         
+            !Begin bisection method
             counter = 0 
             diff = 2._dp
             
-            !Begin bisection method
-            x_l = 2._dp
-            x_r = 1.e-4_dp 
-            
-            numer_l = expint(2, x_l*0.2_dp) + expint(2, x_l*(slw1_length(1) - 0.2_dp))
-            denom_l = expint(2, x_l*1._dp) + expint(2, x_l*(slw1_length(1) - 1._dp))
+            numer_l = expint(2, x_l*x_1) + expint(2, x_l*(length - x_1))
+            denom_l = expint(2, x_l*x_2) + expint(2, x_l*(length - x_2))
             y_l = q_1/q_2 - numer_l/denom_l
 
-            numer_r = expint(2, x_r*0.2_dp) + expint(2, x_r*(slw1_length(1) - 0.2_dp))
-            denom_r = expint(2, x_r*1._dp) + expint(2, x_r*(slw1_length(1) - 1._dp))
+            numer_r = expint(2, x_r*x_1) + expint(2, x_r*(length - x_1))
+            denom_r = expint(2, x_r*x_2) + expint(2, x_r*(length - x_2))
             y_r = q_1/q_2 - numer_r/denom_r
-            
-            write(*,*) y_l, y_r 
             
             if (y_l*y_r.gt.0) &
                   call shutdown('slw1_compute_ref: Problem with &
@@ -1675,8 +1873,8 @@ module slw_functions
                                  &iterations exceeded')
                
                x_c = (x_l + x_r)/2._dp
-               numer_c = expint(2, x_c*0.2_dp) + expint(2, x_c*(slw1_length(1) - 0.2_dp))
-               denom_c = expint(2, x_c*1._dp) + expint(2, x_c*(slw1_length(1) - 1._dp))
+               numer_c = expint(2, x_c*x_1) + expint(2, x_c*(length - x_1))
+               denom_c = expint(2, x_c*x_2) + expint(2, x_c*(length - x_2))
                y_c = q_1/q_2 - numer_c/denom_c
                
                if (y_c * y_l .lt. 0) then
@@ -1692,28 +1890,24 @@ module slw_functions
                diff = dabs((y_r - y_l)/(y_c + 1.e-6_dp))
                
             enddo
-
+            
             !Finish computing kappa and a
             kappa_out = x_c
-            denom_c = (2._dp*5.67e-8_dp*(Tref**4)*&
-              (expint(2, x_c*0.2_dp) + expint(2, x_c*(slw1_length(1) - 0.2_dp))))
+            denom_c = (2._dp*Planck_function(Tref,x_1)*&
+              (expint(2, x_c*x_1) + expint(2, x_c*(length - x_1))))
             a_out = -q_1/denom_c
             
-            q_1 = -(2._dp*pi*a_out*kappa_out*5.67e-8_dp*(Tref**4)*&
-                   (expint(2, x_c*0.2_dp) + expint(2, x_c*(slw1_length(1) - 0.2_dp))))
-            q_2 = -(2._dp*pi*a_out*kappa_out*5.67e-8_dp*(Tref**4)*&
-                   (expint(2, x_c*1._dp) + expint(2, x_c*(slw1_length(1) - 1._dp))))
-            
+            q_1 = -(2._dp*pi*a_out*kappa_out*Planck_function(Tref,x_1)*&
+                   (expint(2, x_c*x_1) + expint(2, x_c*(length - x_1))))
+            q_2 = -(2._dp*pi*a_out*kappa_out*Planck_function(Tref,x_2)*&
+                   (expint(2, x_c*x_2) + expint(2, x_c*(length - x_2))))
             write(*,*) q_1,q_2
             
-                 
+
          case default
             call shutdown('slw1_compute_ref: no valid option for &
                           &slw1_approach')
       endselect
-      
-!      kappa_out = 1.8556_dp
-!      a_out = 0.3566_dp
    endsubroutine slw1_compute_ref
 
 endmodule slw_functions
