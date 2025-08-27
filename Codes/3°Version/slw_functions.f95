@@ -1701,9 +1701,9 @@ a_j = Pgas  !Added just to avoid a compilation warning
       use math_functions, only: expint
       use comp_functions, only: shutdown
       use precision_parameters, only: small
-      use physical_functions, only: Planck_function
+      use physical_functions, only: Ib_function
       implicit none
-      integer,parameter :: max_iter = 1000
+      integer,parameter :: max_iter = 100000
       integer :: counter
       real(dp),intent(in) :: pref,Tref,xsref(:)
       real(dp),intent(out) :: a_out,kappa_out
@@ -1711,7 +1711,7 @@ a_j = Pgas  !Added just to avoid a compilation warning
       real(dp) :: eps,eps_1,eps_2,kp,length
       real(dp) :: denom_l,denom_r,denom_c
       real(dp) :: numer_l,numer_r,numer_c
-      real(dp) :: diff,k_new,k_old
+      real(dp) :: diff,k_new,k_old,factor_x
       real(dp) :: f_1,f_2,q_1,q_2
       real(dp) :: x_1,x_2,x_c,x_l,x_r
       real(dp) :: y_c,y_l,y_r
@@ -1797,13 +1797,18 @@ a_j = Pgas  !Added just to avoid a compilation warning
             !Begin bisection method
             counter = 0 
             diff = 2._dp
-            x_l = small; x_r = 1000._dp
-            
-            y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*x_1))/&
-                            (1._dp - 2._dp*expint(3, x_l*x_2))
+            factor_x = 0.5_dp
+            x_r = 10000._dp; x_l = x_r
             y_r = f_1/f_2 - (1._dp - 2._dp*expint(3, x_r*x_1))/&
                             (1._dp - 2._dp*expint(3, x_r*x_2))
-                            
+            y_l = y_r
+            do while (y_r*y_l.ge.0._dp)
+            	x_r = x_l; y_r = y_l
+            	x_l = x_r*factor_x
+            	y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*x_1))/&
+                                (1._dp - 2._dp*expint(3, x_l*x_2))
+            enddo
+     
             if (y_l*y_r.gt.0) &
                call shutdown('slw1_compute_ref: Problem with &
                                 &bisection method')
@@ -1825,20 +1830,20 @@ a_j = Pgas  !Added just to avoid a compilation warning
                   x_l = x_c
                   y_l = y_c 
                endif
-               
+!write(*,*) counter,x_c,y_l,y_c,y_r               
                diff = dabs((y_r - y_l)/(y_c + 1.e-6_dp))
                
             enddo
 
             !Finish computing kappa and a
             kappa_out = x_c
-            a_out = f_1/(pi*Planck_function(Tref,x_1)*&
+            a_out = f_1/(pi*Ib_function(Tref)*&
                     (1._dp - 2._dp*expint(3, x_c*x_1)))
             
-            f_1 = pi*a_out*Planck_function(Tref,x_1)*(1._dp - 2._dp*expint(3, x_c*x_1))
-            f_2 = pi*a_out*Planck_function(Tref,x_2)*(1._dp - 2._dp*expint(3, x_c*x_2))
+            f_1 = pi*a_out*Ib_function(Tref)*(1._dp - 2._dp*expint(3, x_c*x_1))
+            f_2 = pi*a_out*Ib_function(Tref)*(1._dp - 2._dp*expint(3, x_c*x_2))
             
-            write(*,*) f_1,f_2
+            write(*,*) f_1,f_2,expint(3, x_c*x_1),expint(3, x_c*x_2)
 
          case('Q-Q')
             !Surrogate names
@@ -1857,14 +1862,22 @@ a_j = Pgas  !Added just to avoid a compilation warning
             !Begin bisection method
             counter = 0 
             diff = 2._dp
-            
-            numer_l = expint(2, x_l*x_1) + expint(2, x_l*(length - x_1))
-            denom_l = expint(2, x_l*x_2) + expint(2, x_l*(length - x_2))
-            y_l = q_1/q_2 - numer_l/denom_l
-
+            factor_x = 0.5_dp
+            x_r = 10000._dp; x_l = x_r
             numer_r = expint(2, x_r*x_1) + expint(2, x_r*(length - x_1))
             denom_r = expint(2, x_r*x_2) + expint(2, x_r*(length - x_2))
-            y_r = q_1/q_2 - numer_r/denom_r
+            y_r = q_1*denom_r - q_2*numer_r
+            y_l = y_r
+write(*,*) y_l,y_r
+            do while (y_r*y_l.ge.0._dp)
+write(*,*) x_l,x_r,y_l,y_r
+               x_r = x_l; y_r = y_l
+               x_l = x_r*factor_x
+               numer_l = expint(2, x_l*x_1) + expint(2, x_l*(length - x_1))
+               denom_l = expint(2, x_l*x_2) + expint(2, x_l*(length - x_2))
+               y_l = q_1*denom_l - q_2*numer_l
+            enddo
+write(*,*) x_l,x_r,y_l,y_r
             
             if (y_l*y_r.gt.0) &
                   call shutdown('slw1_compute_ref: Problem with &
@@ -1879,8 +1892,8 @@ a_j = Pgas  !Added just to avoid a compilation warning
                x_c = (x_l + x_r)/2._dp
                numer_c = expint(2, x_c*x_1) + expint(2, x_c*(length - x_1))
                denom_c = expint(2, x_c*x_2) + expint(2, x_c*(length - x_2))
-               y_c = q_1/q_2 - numer_c/denom_c
-               
+               y_c = q_1*denom_c - q_2*numer_c
+write(*,*) counter,x_c,y_r-y_l,y_c,diff
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
                   y_r = y_c
@@ -1890,22 +1903,24 @@ a_j = Pgas  !Added just to avoid a compilation warning
                   x_l = x_c
                   y_l = y_c 
                endif
-               
-               diff = dabs((y_r - y_l)/(y_c + 1.e-6_dp))
+       
+               diff = dabs((x_r - x_l)/(x_c + small))
+               if (diff.gt.(0.1_dp*iter_tol)) &
+                  diff = dabs((y_r - y_l)/(y_c + small))
                
             enddo
             
             !Finish computing kappa and a
             kappa_out = x_c
-            denom_c = (2._dp*Planck_function(Tref,x_1)*&
+            denom_c = (2._dp*pi*kappa_out*Ib_function(Tref)*&
               (expint(2, x_c*x_1) + expint(2, x_c*(length - x_1))))
-            a_out = -q_1/denom_c
+            a_out = -q_1/(denom_c + small)
             
-            q_1 = -(2._dp*pi*a_out*kappa_out*Planck_function(Tref,x_1)*&
+            q_1 = -(2._dp*pi*a_out*kappa_out*Ib_function(Tref)*&
                    (expint(2, x_c*x_1) + expint(2, x_c*(length - x_1))))
-            q_2 = -(2._dp*pi*a_out*kappa_out*Planck_function(Tref,x_2)*&
+            q_2 = -(2._dp*pi*a_out*kappa_out*Ib_function(Tref)*&
                    (expint(2, x_c*x_2) + expint(2, x_c*(length - x_2))))
-            write(*,*) q_1,q_2
+            write(*,*) q_1,q_2,kappa_out,a_out
             
 
          case default

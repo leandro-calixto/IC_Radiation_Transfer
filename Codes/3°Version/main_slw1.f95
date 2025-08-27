@@ -116,11 +116,11 @@ program main_slw
    endif
    slw_nonuniform_method = 'rank_correlated'                            !Não mexer
    slw_mixture_method = 'one_species'                                !'one_species', 'multiplication'
-   slw1_approach = 'F-F'
+   slw1_approach = 'Q-Q'
    slw1_length(1) = 10.0_dp
    slw1_length(2) = 10.0_dp
-   slw1_position(1) = 1.5_dp
-   slw1_position(2) = 30.5_dp
+   slw1_position(1) = 0.5_dp
+   slw1_position(2) = 1.5_dp
    slw_Fmin=0._dp; slw_Fmax=1._dp 
 
    !--------------------------------------------------------------------
