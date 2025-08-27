@@ -1697,6 +1697,8 @@ a_j = Pgas  !Added just to avoid a compilation warning
       !-----------------------------------------------------------------
       !Declaration of variables
       !-----------------------------------------------------------------
+      use constants, only: pi
+      use math_functions, only: expint
       use comp_functions, only: shutdown
       use precision_parameters, only: small
       use physical_functions, only: Planck_function
@@ -1707,8 +1709,10 @@ a_j = Pgas  !Added just to avoid a compilation warning
       real(dp),intent(out) :: a_out,kappa_out
       real(dp),parameter :: iter_tol=1.e-6_dp
       real(dp) :: eps,eps_1,eps_2,kp,length
+      real(dp) :: denom_l,denom_r,denom_c
+      real(dp) :: numer_l,numer_r,numer_c
       real(dp) :: diff,k_new,k_old
-      real(dp) :: F_1,F_2,Q_1,Q_2
+      real(dp) :: f_1,f_2,q_1,q_2
       real(dp) :: x_1,x_2,x_c,x_l,x_r
       real(dp) :: y_c,y_l,y_r
       
@@ -1787,7 +1791,7 @@ a_j = Pgas  !Added just to avoid a compilation warning
             f_1 = get_slw_uniform_flux(Tref,pref,xsref,Tref,&
                                        slw1_ngases,x_1)  
             f_2 = get_slw_uniform_flux(Tref,pref,xsref,Tref,&
-                                       slw1_ngases,x_1)
+                                       slw1_ngases,x_2)
             write(*,*) f_1,f_2
                                        
             !Begin bisection method
@@ -1847,7 +1851,7 @@ a_j = Pgas  !Added just to avoid a compilation warning
             q_1 = get_slw_uniform_source(Tref,pref,xsref,Tref,&
                                          slw1_ngases,x_1,length)  
             q_2 = get_slw_uniform_source(Tref,pref,xsref,Tref,&
-                                         slw1_ngases,x_1,length)
+                                         slw1_ngases,x_2,length)
             write(*,*) q_1,q_2
                                          
             !Begin bisection method
