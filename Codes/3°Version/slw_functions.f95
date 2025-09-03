@@ -1792,7 +1792,6 @@ a_j = Pgas  !Added just to avoid a compilation warning
                                        slw1_ngases,x_1)  
             f_2 = get_slw_uniform_flux(Tref,pref,xsref,Tref,&
                                        slw1_ngases,x_2)
-            write(*,*) f_1,f_2
                                        
             !Begin bisection method
             counter = 0 
@@ -1830,7 +1829,7 @@ a_j = Pgas  !Added just to avoid a compilation warning
                   x_l = x_c
                   y_l = y_c 
                endif
-!write(*,*) counter,x_c,y_l,y_c,y_r               
+           
                diff = dabs((y_r - y_l)/(y_c + 1.e-6_dp))
                
             enddo
@@ -1843,7 +1842,6 @@ a_j = Pgas  !Added just to avoid a compilation warning
             f_1 = pi*a_out*Ib_function(Tref)*(1._dp - 2._dp*expint(3, x_c*x_1))
             f_2 = pi*a_out*Ib_function(Tref)*(1._dp - 2._dp*expint(3, x_c*x_2))
             
-            write(*,*) f_1,f_2,expint(3, x_c*x_1),expint(3, x_c*x_2)
 
          case('Q-Q')
             !Surrogate names
@@ -1857,7 +1855,6 @@ a_j = Pgas  !Added just to avoid a compilation warning
                                          slw1_ngases,x_1,length)  
             q_2 = get_slw_uniform_source(Tref,pref,xsref,Tref,&
                                          slw1_ngases,x_2,length)
-            write(*,*) q_1,q_2
                                          
             !Begin bisection method
             counter = 0 
@@ -1868,16 +1865,15 @@ a_j = Pgas  !Added just to avoid a compilation warning
             denom_r = expint(2, x_r*x_2) + expint(2, x_r*(length - x_2))
             y_r = q_1*denom_r - q_2*numer_r
             y_l = y_r
-write(*,*) y_l,y_r
+
             do while (y_r*y_l.ge.0._dp)
-write(*,*) x_l,x_r,y_l,y_r
+
                x_r = x_l; y_r = y_l
                x_l = x_r*factor_x
                numer_l = expint(2, x_l*x_1) + expint(2, x_l*(length - x_1))
                denom_l = expint(2, x_l*x_2) + expint(2, x_l*(length - x_2))
                y_l = q_1*denom_l - q_2*numer_l
             enddo
-write(*,*) x_l,x_r,y_l,y_r
             
             if (y_l*y_r.gt.0) &
                   call shutdown('slw1_compute_ref: Problem with &
@@ -1893,7 +1889,7 @@ write(*,*) x_l,x_r,y_l,y_r
                numer_c = expint(2, x_c*x_1) + expint(2, x_c*(length - x_1))
                denom_c = expint(2, x_c*x_2) + expint(2, x_c*(length - x_2))
                y_c = q_1*denom_c - q_2*numer_c
-write(*,*) counter,x_c,y_r-y_l,y_c,diff
+
                if (y_c * y_l .lt. 0) then
                   x_r = x_c 
                   y_r = y_c
@@ -1920,7 +1916,61 @@ write(*,*) counter,x_c,y_r-y_l,y_c,diff
                    (expint(2, x_c*x_1) + expint(2, x_c*(length - x_1))))
             q_2 = -(2._dp*pi*a_out*kappa_out*Ib_function(Tref)*&
                    (expint(2, x_c*x_2) + expint(2, x_c*(length - x_2))))
-            write(*,*) q_1,q_2,kappa_out,a_out
+                   
+                   
+         case('Pattern Search')
+         
+            ! Passos para a busca
+            step_a = 0.1_dp
+            step_kappa = 0.1_dp
+                                         
+            !Begin pattern search
+            counter = 0 
+            diff = 2._dp
+
+            do while (diff.gt.iter_tol)
+               counter = counter + 1
+               
+               ! Ponto central para comparação
+               do x = 1, lenght
+                  eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
+                                       slw1_ngases,x)
+                  eps_2 = a_out*(1._dp - dexp(-kappa_out*x)
+                  diff = eps_1 - eps_2
+               end do
+               diff = diff**2
+               
+               ! Testar 8 pontos ao redor do ponto atual (como um quadrado)
+               do i = -1, 1
+                  do j = -1, 1
+                  
+                     if (i == 0 .and. j == 0) cycle ! Pular o ponto central
+                     
+                     ! Atualizando os parâmetros
+                     a_test = a_out + i * step_a
+                     kappa_test = kappa_out + j * step_kappa
+                     
+                     do x = 1, lenght
+                        eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
+                                       slw1_ngases,x)
+                        eps_2 = a_test*(1._dp - dexp(-kappa_test*x)
+                        diff_teste = eps_1 - eps_2
+                     end do
+                     diff_test = diff_test**2
+
+                     ! Atualizar a posição atual se encontrou melhoria
+                     if (diff_test < diff) then
+                        a_out = a_test
+                        kappa_out = kappa_test
+                     end if
+                  end do
+               end do
+               
+               if (counter.gt.max_iter) &
+                  call shutdown('slw1_compute_ref: Maximum number of &
+                                 &iterations exceeded')
+                                 
+            enddo
             
 
          case default
