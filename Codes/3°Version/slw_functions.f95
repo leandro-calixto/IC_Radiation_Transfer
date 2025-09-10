@@ -1704,14 +1704,18 @@ a_j = Pgas  !Added just to avoid a compilation warning
       use physical_functions, only: Ib_function
       implicit none
       integer,parameter :: max_iter = 100000
-      integer :: counter
+      integer :: counter,i,j,x,y,nx
       real(dp),intent(in) :: pref,Tref,xsref(:)
       real(dp),intent(out) :: a_out,kappa_out
       real(dp),parameter :: iter_tol=1.e-6_dp
+      real(dp) :: diff_grid(-1:1, -1:1),temp_grid(-1:1, -1:1)
       real(dp) :: eps,eps_1,eps_2,kp,length
       real(dp) :: denom_l,denom_r,denom_c
       real(dp) :: numer_l,numer_r,numer_c
-      real(dp) :: diff,k_new,k_old,factor_x
+      real(dp) :: diff, diff_test 
+      real(dp) :: k_new,k_old,factor_x
+      real(dp) :: step_a,step_kappa,dx
+      real(dp) :: a_test,kappa_test 
       real(dp) :: f_1,f_2,q_1,q_2
       real(dp) :: x_1,x_2,x_c,x_l,x_r
       real(dp) :: y_c,y_l,y_r
@@ -1802,9 +1806,9 @@ a_j = Pgas  !Added just to avoid a compilation warning
                             (1._dp - 2._dp*expint(3, x_r*x_2))
             y_l = y_r
             do while (y_r*y_l.ge.0._dp)
-            	x_r = x_l; y_r = y_l
-            	x_l = x_r*factor_x
-            	y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*x_1))/&
+               x_r = x_l; y_r = y_l
+               x_l = x_r*factor_x
+               y_l = f_1/f_2 - (1._dp - 2._dp*expint(3, x_l*x_1))/&
                                 (1._dp - 2._dp*expint(3, x_l*x_2))
             enddo
      
@@ -1920,51 +1924,104 @@ a_j = Pgas  !Added just to avoid a compilation warning
                    
          case('Pattern Search')
          
+            ! Pré varredura para encontrar um bom chute 
+            diff_grid = huge(1.0_dp)
+            step_a = 0.2_dp
+            step_kappa = 0.2_dp
+            nx = 20._dp                ! Número de pontos da malha
+            dx = length / (nx - 1._dp)
+            
+            do i = 1, 20
+               a_test = 0.1_dp + i * step_a
+               do j = 1, 20
+                  kappa_test = 0.01_dp + j * step_kappa
+                  
+                  diff_test = 0._dp
+                  do x = 1, nx
+                     x_c = (x_c-1) * dx
+                     eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
+                                                slw1_ngases,x_c)
+                     eps_2 = a_test * (1.0_dp - exp(-kappa_test * x_c))
+                     diff_test = diff_test + (eps_1 - eps_2)**2 * dx
+                  end do
+
+                  if (diff_test < diff_grid(0,0)) then
+                     diff_grid(0,0) = diff_test   ! Ponto central para comparação
+                     a_out = a_test
+                     kappa_out = kappa_test
+                  endif
+               end do
+            end do
+         
             ! Passos para a busca
             step_a = 0.1_dp
             step_kappa = 0.1_dp
                                          
-            !Begin pattern search
+            ! Começar a busca direta
             counter = 0 
-            diff = 2._dp
+            nx = 100._dp
+            dx = length / (nx - 1._dp)
 
-            do while (diff.gt.iter_tol)
+            do while (diff_grid(0,0).gt.iter_tol)
                counter = counter + 1
                
-               ! Ponto central para comparação
-               do x = 1, lenght
-                  eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
-                                       slw1_ngases,x)
-                  eps_2 = a_out*(1._dp - dexp(-kappa_out*x)
-                  diff = eps_1 - eps_2
-               end do
-               diff = diff**2
-               
-               ! Testar 8 pontos ao redor do ponto atual (como um quadrado)
+               ! Testar 8 pontos ao redor do ponto atual (um quadrado)
                do i = -1, 1
                   do j = -1, 1
                   
-                     if (i == 0 .and. j == 0) cycle ! Pular o ponto central
+                     if (i.eq.0 .and. j.eq.0) cycle ! Pular o ponto central
+                     if (diff_grid(i,j).lt.huge(1.0_dp)) cycle !Pula este também, já foi calculado
                      
                      ! Atualizando os parâmetros
                      a_test = a_out + i * step_a
                      kappa_test = kappa_out + j * step_kappa
                      
-                     do x = 1, lenght
+                     diff_test = 0._dp
+                     do x = 1, nx
+                        x_c = (x-1) * dx
                         eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
-                                       slw1_ngases,x)
-                        eps_2 = a_test*(1._dp - dexp(-kappa_test*x)
-                        diff_teste = eps_1 - eps_2
+                                                   slw1_ngases,x_c)
+                        eps_2 = a_test*(1._dp - dexp(-kappa_test*x_c))
+                        diff_test = diff_test + (eps_1 - eps_2)**2 * dx
                      end do
-                     diff_test = diff_test**2
+                     
+                     diff_grid(i,j) = diff_test
+                  end do
+               end do
+               
+               ! Encontrar o ponto com menor diferença
+               do i = -1, 1
+                  do j = -1, 1
+                     if (i.eq.0 .and. j.eq.0) cycle ! Pular o ponto central
+                     
+                     ! Comparar todos e guardar para atualizar depois
+                     if (diff_grid(i, j).lt.diff_grid(0,0)) then
+                        x = i
+                        y = j
+                        diff_test = diff_grid(i, j)
+                        a_test = a_out + i * step_a
+                        kappa_test = kappa_out + j * step_kappa
+                     end if
+                     
+                  end do
+               end do
+               
+               !Shiftar a matriz e atualizar os parâmetros  
+               temp_grid = huge(1.0_dp)
 
-                     ! Atualizar a posição atual se encontrou melhoria
-                     if (diff_test < diff) then
-                        a_out = a_test
-                        kappa_out = kappa_test
+               do i = -1, 1
+                  do j = -1, 1
+                     ! nova posição = ponto antigo menos o deslocamento (x,y)
+                     if ( (i-x >= -1) .and. (i-x <= 1) .and. &
+                        (j-y >= -1) .and. (j-y <= 1) ) then
+                        temp_grid(i-x, j-y) = diff_grid(i, j)
                      end if
                   end do
                end do
+
+               diff_grid = temp_grid
+               a_out = a_test
+               kappa_out = kappa_test
                
                if (counter.gt.max_iter) &
                   call shutdown('slw1_compute_ref: Maximum number of &
