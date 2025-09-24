@@ -1703,7 +1703,7 @@ a_j = Pgas  !Added just to avoid a compilation warning
       use precision_parameters, only: small
       use physical_functions, only: Ib_function
       implicit none
-      integer,parameter :: max_iter = 100000
+      integer,parameter :: max_iter = 1000
       integer :: counter,i,j,x,y,nx
       real(dp),intent(in) :: pref,Tref,xsref(:)
       real(dp),intent(out) :: a_out,kappa_out
@@ -1923,28 +1923,32 @@ a_j = Pgas  !Added just to avoid a compilation warning
                    
                    
          case('Pattern Search')
+             
+            length = maxval(slw1_length)
          
             ! Pré varredura para encontrar um bom chute 
             diff_grid = huge(1.0_dp)
-            step_a = 0.2_dp
-            step_kappa = 0.2_dp
-            nx = 20._dp                ! Número de pontos da malha
+            step_a = 0.1_dp
+            step_kappa = 0.1_dp
+            nx = 50                ! Número de pontos da malha
             dx = length / (nx - 1._dp)
-            
-            do i = 1, 20
-               a_test = 0.1_dp + i * step_a
-               do j = 1, 20
+
+            do i = 1, 50
+               a_test = 0.01_dp + i * step_a
+               do j = 1, 50
                   kappa_test = 0.01_dp + j * step_kappa
                   
                   diff_test = 0._dp
                   do x = 1, nx
-                     x_c = (x_c-1) * dx
+                     x_c = real(x-1,dp) * dx
                      eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
                                                 slw1_ngases,x_c)
                      eps_2 = a_test * (1.0_dp - exp(-kappa_test * x_c))
                      diff_test = diff_test + (eps_1 - eps_2)**2 * dx
                   end do
-
+                  
+!write(*,*) a_test,kappa_test,diff_test
+                  
                   if (diff_test < diff_grid(0,0)) then
                      diff_grid(0,0) = diff_test   ! Ponto central para comparação
                      a_out = a_test
@@ -1952,24 +1956,24 @@ a_j = Pgas  !Added just to avoid a compilation warning
                   endif
                end do
             end do
-         
+            
             ! Passos para a busca
-            step_a = 0.1_dp
-            step_kappa = 0.1_dp
+            step_a = 0.01_dp
+            step_kappa = 0.01_dp
                                          
             ! Começar a busca direta
             counter = 0 
-            nx = 100._dp
+            nx = 100
             dx = length / (nx - 1._dp)
 
-            do while (diff_grid(0,0).gt.iter_tol)
+            do while (diff_grid(0,0).gt.1.65e-2_dp)
                counter = counter + 1
                
                ! Testar 8 pontos ao redor do ponto atual (um quadrado)
                do i = -1, 1
                   do j = -1, 1
                   
-                     if (i.eq.0 .and. j.eq.0) cycle ! Pular o ponto central
+                     if (i.eq.0 .and. j.eq.0) cycle ! Pula o ponto central
                      if (diff_grid(i,j).lt.huge(1.0_dp)) cycle !Pula este também, já foi calculado
                      
                      ! Atualizando os parâmetros
@@ -1978,13 +1982,15 @@ a_j = Pgas  !Added just to avoid a compilation warning
                      
                      diff_test = 0._dp
                      do x = 1, nx
-                        x_c = (x-1) * dx
+                        x_c = real(x-1,dp) * dx
                         eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
                                                    slw1_ngases,x_c)
                         eps_2 = a_test*(1._dp - dexp(-kappa_test*x_c))
                         diff_test = diff_test + (eps_1 - eps_2)**2 * dx
                      end do
                      
+write(*,*) a_test,kappa_test,diff_test                     
+
                      diff_grid(i,j) = diff_test
                   end do
                end do
@@ -2037,3 +2043,6 @@ a_j = Pgas  !Added just to avoid a compilation warning
    endsubroutine slw1_compute_ref
 
 endmodule slw_functions
+
+
+

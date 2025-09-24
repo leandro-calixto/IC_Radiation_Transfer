@@ -97,7 +97,7 @@ program main_slw
    !Set up case
    !--------------------------------------------------------------------
    call print_to_prompt('Set up case',3)
-   validation_case = 'Pattern Search'
+   validation_case = 'solovjovJQSRT2011'
    validation_subcase = 3
    call validation_setup                                                !Não mexer
 
@@ -116,7 +116,7 @@ program main_slw
    endif
    slw_nonuniform_method = 'rank_correlated'                            !Não mexer
    slw_mixture_method = 'one_species'                                !'one_species', 'multiplication'
-   slw1_approach = 'Q-Q'
+   slw1_approach = 'Pattern Search'
    slw1_length(1) = 10.0_dp
    slw1_length(2) = 10.0_dp
    slw1_position(1) = 0.5_dp
