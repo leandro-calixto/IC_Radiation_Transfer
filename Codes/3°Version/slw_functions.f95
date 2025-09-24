@@ -1719,6 +1719,9 @@ a_j = Pgas  !Added just to avoid a compilation warning
       real(dp) :: f_1,f_2,q_1,q_2
       real(dp) :: x_1,x_2,x_c,x_l,x_r
       real(dp) :: y_c,y_l,y_r
+      real(dp) :: minkappa,maxkappa,dkappa,minweight,maxweight,dweight
+      integer :: nkappa,ikappa,nweight,iweight
+      real(dp) :: eps2L
       
       selectcase(trim(slw1_approach))
          case('kp-epsilon')
@@ -1931,23 +1934,28 @@ a_j = Pgas  !Added just to avoid a compilation warning
             step_a = 0.1_dp
             step_kappa = 0.1_dp
             nx = 50                ! Número de pontos da malha
-            dx = length / (nx - 1._dp)
-
-            do i = 1, 50
-               a_test = 0.01_dp + i * step_a
-               do j = 1, 50
-                  kappa_test = 0.01_dp + j * step_kappa
+            dx = length / (nx)
+            
+            minkappa = 0.1_dp; maxkappa = 20._dp; nkappa = 10
+            minweight = 0.001_dp; maxweight = 1._dp; nweight = 10
+            dkappa = (maxkappa - minkappa)/real(nkappa - 1,dp)
+            dweight = (maxweight - minweight)/real(nweight - 1,dp)
+!open(file='plot.csv',unit=111)
+            do iweight = 1, nweight
+               a_test = minweight + real(iweight-1,dp) * dweight
+               do ikappa = 1, nkappa
+                  kappa_test = minkappa + real(ikappa-1,dp) * dkappa
                   
                   diff_test = 0._dp
                   do x = 1, nx
-                     x_c = real(x-1,dp) * dx
+                     x_c = real(x,dp) * dx
                      eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
                                                 slw1_ngases,x_c)
                      eps_2 = a_test * (1.0_dp - exp(-kappa_test * x_c))
-                     diff_test = diff_test + (eps_1 - eps_2)**2 * dx
+                     diff_test = diff_test + ((eps_1 - eps_2)**2) * dx
                   end do
                   
-!write(*,*) a_test,kappa_test,diff_test
+!write(111,'(3(e26.15,:,","))') a_test,kappa_test,diff_test
                   
                   if (diff_test < diff_grid(0,0)) then
                      diff_grid(0,0) = diff_test   ! Ponto central para comparação
@@ -1956,7 +1964,7 @@ a_j = Pgas  !Added just to avoid a compilation warning
                   endif
                end do
             end do
-            
+
             ! Passos para a busca
             step_a = 0.01_dp
             step_kappa = 0.01_dp
@@ -1966,9 +1974,12 @@ a_j = Pgas  !Added just to avoid a compilation warning
             nx = 100
             dx = length / (nx - 1._dp)
 
-            do while (diff_grid(0,0).gt.1.65e-2_dp)
+            do while (counter.lt.max_iter)
                counter = counter + 1
-               
+if ((counter.gt.10).and.(mod(counter,100).eq.0)) then
+   step_a = step_a/2._dp               
+   step_kappa = step_kappa/2._dp
+endif               
                ! Testar 8 pontos ao redor do ponto atual (um quadrado)
                do i = -1, 1
                   do j = -1, 1
@@ -1981,15 +1992,14 @@ a_j = Pgas  !Added just to avoid a compilation warning
                      kappa_test = kappa_out + j * step_kappa
                      
                      diff_test = 0._dp
+                     eps2L = 0._dp
                      do x = 1, nx
                         x_c = real(x-1,dp) * dx
                         eps_1 = get_slw_emissivity(Tref,pref,xsref,Tref,&
                                                    slw1_ngases,x_c)
                         eps_2 = a_test*(1._dp - dexp(-kappa_test*x_c))
                         diff_test = diff_test + (eps_1 - eps_2)**2 * dx
-                     end do
-                     
-write(*,*) a_test,kappa_test,diff_test                     
+                     end do                     
 
                      diff_grid(i,j) = diff_test
                   end do
@@ -2034,7 +2044,7 @@ write(*,*) a_test,kappa_test,diff_test
                                  &iterations exceeded')
                                  
             enddo
-            
+write(*,*) a_out,kappa_out            
 
          case default
             call shutdown('slw1_compute_ref: no valid option for &
